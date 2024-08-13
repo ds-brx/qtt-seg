@@ -13,6 +13,47 @@ import time
 import random
 from torchvision import models
 
+class CamVidDataset(Dataset):
+    def __init__(self, root_dir, split='train', transform=None):
+        self.root_dir = root_dir
+        self.split = split
+        self.transform = transform
+        
+        # Directories for images and masks
+        self.images_dir = os.path.join(root_dir, split)
+        self.masks_dir = os.path.join(root_dir, f'{split}_labels')
+        
+        # List of images and masks
+        self.images = []
+        self.masks = []
+        
+        # Populate the lists with image and mask paths
+        for img_name in os.listdir(self.images_dir):
+            img_path = os.path.join(self.images_dir, img_name)
+            mask_name = img_name.replace('.png', '_L.png')
+            mask_path = os.path.join(self.masks_dir, mask_name)
+            
+            self.images.append(img_path)
+            self.masks.append(mask_path)
+    
+    def __len__(self):
+        return len(self.images)
+    
+    def __getitem__(self, idx):
+        img_path = self.images[idx]
+        mask_path = self.masks[idx]
+        
+        image = Image.open(img_path).convert("RGB")
+        mask = Image.open(mask_path)
+        
+        if self.transform:
+            image = self.transform(image)
+            mask = self.transform(mask)
+        mask = torch.tensor(np.array(mask), dtype=torch.long)
+        
+        return image, mask
+
+
 class CityscapesDataset(Dataset):
     def __init__(self, root_dir, split='train', transform=None):
         self.root_dir = root_dir
