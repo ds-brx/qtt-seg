@@ -24,50 +24,54 @@ class PerfEstimator(torch.nn.Module):
     refine_lr = 1e-3
 
     def __init__(
-        self
+        self,
+        device=torch.device("cpu")  # Default to CPU; pass in 'cuda' for GPU
     ):
         super().__init__()
 
-        self.encoder = FeatureEncoder(mlp_out=32)
-        self.likelihood = gpytorch.likelihoods.GaussianLikelihood()
+        self.device = device
+
+        # Move the encoder and GP model to the specified device
+        self.encoder = FeatureEncoder(mlp_out=32).to(self.device)
+        self.likelihood = gpytorch.likelihoods.GaussianLikelihood().to(self.device)
         self.gp_model = GPRegressionModel(
             train_x=None,
             train_y=None,
             likelihood=self.likelihood,
-        )
+        ).to(self.device)
         self.mll = gpytorch.mlls.ExactMarginalLogLikelihood(
             self.likelihood,
             self.gp_model,
-        )
-    def fit_pipeline(self, config,curve,budget,target,meta_feat):
+        ).to(self.device)
+
+    def fit_pipeline(self, config, curve, budget, target, meta_feat):
         self.train()
 
         optimizer = torch.optim.Adam(self.parameters(), self.refine_lr)
 
+        # Ensure that all tensors are moved to the appropriate device
+        target = target.to(self.device)
 
         for i in range(self.refine_steps):
             optimizer.zero_grad()
-            feat = self.encoder(config,curve,budget,meta_feat)
+            feat = self.encoder(config, curve, budget, meta_feat).to(self.device)
             self.gp_model.set_train_data(feat, target, False)
             output = self.gp_model(feat)
-            loss = -self.mll(output, target) 
+            loss = -self.mll(output, target)
             loss.backward()
             optimizer.step()
-            print("Step: {} Loss: {}".format(i,loss))
+            print("Step: {} Loss: {}".format(i, loss.item()))
 
         self.eval()
+
     def predict_pipeline(
         self,
-        config,curve,budget,meta_feat,
+        config, curve, budget, meta_feat,
     ):
         self.eval()
         with torch.no_grad(): 
-            test_x = self.encoder(config,curve,budget,meta_feat)
+            test_x = self.encoder(config, curve, budget, meta_feat).to(self.device)
             pred = self.likelihood(self.gp_model(test_x))
-        mean = pred.mean.reshape(-1)
-        std = pred.stddev.reshape(-1)
+        mean = pred.mean.reshape(-1).to(self.device)
+        std = pred.stddev.reshape(-1).to(self.device)
         return mean, std
-
-
-
-

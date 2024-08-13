@@ -69,7 +69,7 @@ class Optimiser:
     def prepare(self):
         for config in self.configs:
             print("Preparing Config {}".format(config["idx"]))
-            config = self.finetune(config,budget=0)
+            config = self.finetune(config,budget=1)
             self.update_configs(config)
 
     def finetune(self,config,budget):

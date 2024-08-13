@@ -38,18 +38,29 @@ class FeatureEncoder(nn.Module):
         self.head = MLP(enc_dims, mlp_out, 3, 128, act_fn=nn.GELU)
 
     def forward(self, config, curve, budget, metafeat):
+        # Collect the features
         x = []
-        
-        config_enc = self.config_encoder(config)
-        x = torch.cat([torch.tensor(x),config_enc], dim=1)
-        x = torch.cat([x, budget], dim=1)
-       
-        curve = curve.unsqueeze(0).permute(1,2,0)
-        curve_enc = self.curve_embedder(curve.float())
-        x = torch.cat([x, curve_enc], dim=1)
-        
-        meta_enc = self.fc_meta(metafeat.float())
-        x = torch.cat([x, meta_enc], dim=1)
-        x = self.head(x)
-        return x
 
+        # Encode configuration
+        config_enc = self.config_encoder(config)
+        x.append(config_enc)
+        
+        # Add budget
+        x.append(budget)
+
+        # Encode curve
+        curve = curve.unsqueeze(0).permute(1, 2, 0)
+        curve_enc = self.curve_embedder(curve.float())
+        x.append(curve_enc)
+        
+        # Encode meta-features
+        meta_enc = self.fc_meta(metafeat.float())
+        x.append(meta_enc)
+        
+        # Concatenate all encoded features along dimension 1
+        x = torch.cat(x, dim=1)
+        
+        # Pass through the final MLP head
+        x = self.head(x)
+
+        return x
