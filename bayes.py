@@ -3,7 +3,7 @@ from performance import PerfEstimator
 from torchvision import transforms
 from scipy.stats import norm
 import numpy as np
-from data import CityscapesDataset,train_config
+from data import CamVidDataset,train_config
 import torch
 
 class Optimiser:
@@ -22,9 +22,9 @@ class Optimiser:
         transforms.Resize((128,256))
     ])
 
-        self.train_dataset = CityscapesDataset(root_dir='data', split='train', transform=self.train_transform)
-        self.val_dataset = CityscapesDataset(root_dir='data', split='val', transform=self.train_transform)
-        self.num_classes = 19
+        self.train_dataset = CamVidDataset(root_dir='CamVid', split='train', transform=self.train_transform)
+        self.val_dataset = CamVidDataset(root_dir='CamVid', split='val', transform=self.train_transform)
+        self.num_classes = 11
 
     def train(self,b):        
         idx,config,perf_curve,budget,perf_target,meta_feat = self.prepare_data_perf(self.configs,b-1,"train")
