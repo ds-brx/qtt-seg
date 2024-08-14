@@ -6,9 +6,9 @@ from config import sample_configurations
 
 if __name__ == "__main__":
 
-    hp_file = "/Users/breenda/Desktop/qtt_seg/hp.json"
-    num_configs = 128
-    max_budget = 50
+    hp_file = "hp.json"
+    num_configs = 3
+    max_budget = 10
 
     configs = sample_configurations(hp_file,num_configs,max_budget)
 

@@ -16,7 +16,7 @@ from tqdm import tqdm
 import pandas as pd
 
 class CamVidDataset(Dataset):
-    def __init__(self, root_dir, split='train', transform=None, class_dict_csv='/content/drive/MyDrive/Camvid/CamVid/class_dict.csv'):
+    def __init__(self, root_dir, split='train', transform=None, class_dict_csv='/work/dlclarge2/dasb-Camvid/CamVid/class_dict.csv'):
         self.root_dir = root_dir
         self.split = split
         self.transform = transform
@@ -128,10 +128,9 @@ class CityscapesDataset(Dataset):
 def modify_model_for_camvid(model, num_classes=11):
     if isinstance(model, models.segmentation.DeepLabV3):
         model.classifier[4] = nn.Conv2d(256, num_classes, kernel_size=(1, 1), stride=(1, 1))
-    elif isinstance(model, models.segmentation.FCN):
-        model.classifier[4] = nn.Conv2d(512, num_classes, kernel_size=(1, 1), stride=(1, 1))
     elif isinstance(model, models.segmentation.LRASPP):
-        model.classifier = nn.Conv2d(128, num_classes, kernel_size=(1, 1), stride=(1, 1))
+        model.classifier.low_classifier = nn.Conv2d(40, num_classes, kernel_size=(1, 1), stride=(1, 1))
+        model.classifier.high_classifier = nn.Conv2d(128, num_classes, kernel_size=(1, 1), stride=(1, 1))
     else:
         raise ValueError("Unsupported model type")
 
@@ -148,10 +147,8 @@ def train_config(config, budget, num_classes, train_dataset, val_dataset):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
     if config["model"] == 0:
-        model = models.segmentation.deeplabv3_resnet50(weights=models.segmentation.DeepLabV3_ResNet50_Weights.DEFAULT)
+        model = models.segmentation.deeplabv3_mobilenet_v3_large(weights=models.segmentation.DeepLabV3_MobileNet_V3_Large_Weights.DEFAULT)
     elif config["model"] == 1:
-        model = models.segmentation.fcn_resnet50(weights=models.segmentation.FCN_ResNet50_Weights.DEFAULT)
-    elif config["model"] == 2:
         model = models.segmentation.lraspp_mobilenet_v3_large(weights=models.segmentation.LRASPP_MobileNet_V3_Large_Weights.DEFAULT)
     
     model = modify_model_for_camvid(model, num_classes=num_classes)

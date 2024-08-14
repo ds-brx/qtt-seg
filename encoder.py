@@ -9,11 +9,11 @@ class FeatureEncoder(nn.Module):
     def __init__(
         self,
         config_in=5,
-        config_out=32,
-        curve_in=50,
-        curve_out=16,
+        config_out=8,
+        curve_in=10,
+        curve_out=8,
         meta_in=4,
-        meta_out=16,
+        meta_out=8,
         mlp_out=32
     ):
         super().__init__()
@@ -35,7 +35,7 @@ class FeatureEncoder(nn.Module):
         self.fc_meta = nn.Linear(meta_in, meta_out)
         enc_dims += meta_out
 
-        self.head = MLP(enc_dims, mlp_out, 3, 128, act_fn=nn.GELU)
+        self.head = MLP(enc_dims, mlp_out, 3, 16, act_fn=nn.GELU)
 
     def forward(self, config, curve, budget, metafeat):
         # Collect the features

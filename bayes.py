@@ -22,8 +22,8 @@ class Optimiser:
         transforms.Resize((128,256))
     ])
 
-        self.train_dataset = CamVidDataset(root_dir='CamVid', split='train', transform=self.train_transform)
-        self.val_dataset = CamVidDataset(root_dir='CamVid', split='val', transform=self.train_transform)
+        self.train_dataset = CamVidDataset(root_dir='/work/dlclarge2/dasb-Camvid/CamVid', split='train', transform=self.train_transform)
+        self.val_dataset = CamVidDataset(root_dir='/work/dlclarge2/dasb-Camvid/CamVid', split='val', transform=self.train_transform)
         self.num_classes = 11
 
     def train(self,b):        
