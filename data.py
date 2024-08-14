@@ -13,6 +13,7 @@ import time
 import random
 from torchvision import models
 from tqdm import tqdm
+import pandas as pd
 
 class CamVidDataset(Dataset):
     def __init__(self, root_dir, split='train', transform=None, class_dict_csv='/content/drive/MyDrive/Camvid/CamVid/class_dict.csv'):
@@ -65,15 +66,18 @@ class CamVidDataset(Dataset):
         # Convert mask to class indices
         mask = np.array(mask)
         h, w, _ = mask.shape
-        mask_indices = np.zeros((h, w), dtype=np.long)
+        mask_indices = np.zeros((h, w))
         
         for rgb, class_idx in self.rgb_to_class.items():
             mask_indices[np.all(mask == rgb, axis=-1)] = class_idx
         
-        mask = torch.tensor(mask_indices, dtype=torch.long)
+        # image = torch.tensor(image)
+        # mask = torch.tensor(mask_indices, dtype=torch.long)
         
         if self.transform:
             image = self.transform(image)
+            mask = self.transform(mask_indices)
+        mask = mask.to(torch.long)
         
         return image, mask
 
@@ -144,11 +148,11 @@ def train_config(config, budget, num_classes, train_dataset, val_dataset):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
     if config["model"] == 0:
-        model = models.segmentation.deeplabv3_resnet50(pretrained=True)
+        model = models.segmentation.deeplabv3_resnet50(weights=models.segmentation.DeepLabV3_ResNet50_Weights.DEFAULT)
     elif config["model"] == 1:
-        model = models.segmentation.fcn_resnet50(pretrained=True)
+        model = models.segmentation.fcn_resnet50(weights=models.segmentation.FCN_ResNet50_Weights.DEFAULT)
     elif config["model"] == 2:
-        model = models.segmentation.lraspp_mobilenet_v3_large(pretrained=True)
+        model = models.segmentation.lraspp_mobilenet_v3_large(weights=models.segmentation.LRASPP_MobileNet_V3_Large_Weights.DEFAULT)
     
     model = modify_model_for_camvid(model, num_classes=num_classes)
     model, optimiser = modify_model_and_optimizer(
@@ -174,6 +178,7 @@ def train_config(config, budget, num_classes, train_dataset, val_dataset):
             outputs = model(images)['out']
             
             # masks = masks.argmax(dim=1)  # Convert masks to the correct format
+            masks = torch.squeeze(masks,1)
             print(outputs.shape, masks.shape)
             loss = criterion(outputs, masks)
             loss.backward()
@@ -186,10 +191,10 @@ def train_config(config, budget, num_classes, train_dataset, val_dataset):
         
         print(f"Epoch {epoch+1} Final Loss: {running_loss/len(train_loader):.4f}")
         
-    avg_mean_iou = validate_config(model, val_loader, device, num_classes)
+    avg_loss = validate_config(model, val_loader, device, criterion)
 
     total_time = time.time() - start_time
-    return avg_mean_iou, total_time
+    return avg_loss, total_time
 
 def modify_model_and_optimizer(model, pct_to_freeze=0.0, layer_decay=None, lr=1e-4):
     layers = list(model.children())
@@ -229,30 +234,25 @@ def modify_model_and_optimizer(model, pct_to_freeze=0.0, layer_decay=None, lr=1e
     return model, optimizer
 
 
-def validate_config(model, valid_loader, device, num_classes):
+def validate_config(model, valid_loader, device, loss_fn):
     model.eval()
-    pixel_accuracy_list = []
-    mean_iou_list = []
+    loss_list = []
     
     with torch.no_grad():
-        # Wrap the validation loop with tqdm
         for images, masks in tqdm(valid_loader, desc="Validating", unit="batch"):
             images, masks = images.to(device), masks.to(device)
-            masks = masks.squeeze(1) 
-            outputs = model(images)['out']
-            outputs = torch.argmax(outputs, dim=1)  # Get the predicted class
+            masks = masks.squeeze(1)
             
-            pixel_accuracy, mean_iou = compute_metrics(outputs, masks, num_classes)
-            pixel_accuracy_list.append(pixel_accuracy)
-            mean_iou_list.append(mean_iou)
+            outputs = model(images)['out']
+            
+            loss = loss_fn(outputs, masks)
+            loss_list.append(loss.item())
     
-    avg_pixel_accuracy = np.mean(pixel_accuracy_list)
-    avg_mean_iou = np.mean(mean_iou_list)
+    avg_loss = np.mean(loss_list)
     
-    print(f'Validation Pixel Accuracy: {avg_pixel_accuracy:.4f}')
-    print(f'Validation Mean IoU: {avg_mean_iou:.4f}')
-    return avg_mean_iou
-
+    print(f'Validation Loss: {avg_loss:.4f}')
+    
+    return avg_loss
 
 def compute_metrics(predictions, targets, num_classes):
     """
