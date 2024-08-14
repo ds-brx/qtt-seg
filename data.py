@@ -12,9 +12,10 @@ from torch.utils.data import DataLoader
 import time
 import random
 from torchvision import models
+from tqdm import tqdm
 
 class CamVidDataset(Dataset):
-    def __init__(self, root_dir, split='train', transform=None):
+    def __init__(self, root_dir, split='train', transform=None, class_dict_csv='/content/drive/MyDrive/Camvid/CamVid/class_dict.csv'):
         self.root_dir = root_dir
         self.split = split
         self.transform = transform
@@ -35,7 +36,22 @@ class CamVidDataset(Dataset):
             
             self.images.append(img_path)
             self.masks.append(mask_path)
-    
+        
+        # Load the class mappings from CSV
+        self.rgb_to_class = self.load_class_mappings(class_dict_csv)
+        
+    def load_class_mappings(self, csv_path):
+        # Read the CSV file
+        df = pd.read_csv(csv_path, sep='\t', header=None, names=['Class', 'R', 'G', 'B'])
+        
+        # Create a mapping from RGB tuples to class indices
+        rgb_to_class = {}
+        for idx, row in df.iterrows():
+            rgb = (row['R'], row['G'], row['B'])
+            rgb_to_class[rgb] = idx  # Use the row index as the class index
+        
+        return rgb_to_class
+
     def __len__(self):
         return len(self.images)
     
@@ -46,10 +62,18 @@ class CamVidDataset(Dataset):
         image = Image.open(img_path).convert("RGB")
         mask = Image.open(mask_path)
         
+        # Convert mask to class indices
+        mask = np.array(mask)
+        h, w, _ = mask.shape
+        mask_indices = np.zeros((h, w), dtype=np.long)
+        
+        for rgb, class_idx in self.rgb_to_class.items():
+            mask_indices[np.all(mask == rgb, axis=-1)] = class_idx
+        
+        mask = torch.tensor(mask_indices, dtype=torch.long)
+        
         if self.transform:
             image = self.transform(image)
-            mask = self.transform(mask)
-        mask = torch.tensor(np.array(mask), dtype=torch.long)
         
         return image, mask
 
@@ -96,10 +120,24 @@ class CityscapesDataset(Dataset):
         
         return image, mask
 
-def train_config(config,budget,num_classes,train_dataset,val_dataset):
+
+def modify_model_for_camvid(model, num_classes=11):
+    if isinstance(model, models.segmentation.DeepLabV3):
+        model.classifier[4] = nn.Conv2d(256, num_classes, kernel_size=(1, 1), stride=(1, 1))
+    elif isinstance(model, models.segmentation.FCN):
+        model.classifier[4] = nn.Conv2d(512, num_classes, kernel_size=(1, 1), stride=(1, 1))
+    elif isinstance(model, models.segmentation.LRASPP):
+        model.classifier = nn.Conv2d(128, num_classes, kernel_size=(1, 1), stride=(1, 1))
+    else:
+        raise ValueError("Unsupported model type")
+
+    return model
+
+def train_config(config, budget, num_classes, train_dataset, val_dataset):
     print("Training...")
     start_time = time.time()
     config = config["config"]
+    print(config)
     train_loader = DataLoader(dataset=train_dataset, batch_size=config["batch_size"], shuffle=True)
     val_loader = DataLoader(dataset=val_dataset, batch_size=config["batch_size"], shuffle=False)
     
@@ -107,12 +145,12 @@ def train_config(config,budget,num_classes,train_dataset,val_dataset):
     
     if config["model"] == 0:
         model = models.segmentation.deeplabv3_resnet50(pretrained=True)
-    if config["model"] == 1:
+    elif config["model"] == 1:
         model = models.segmentation.fcn_resnet50(pretrained=True)
-    if config["model"] == 2:
+    elif config["model"] == 2:
         model = models.segmentation.lraspp_mobilenet_v3_large(pretrained=True)
     
-
+    model = modify_model_for_camvid(model, num_classes=num_classes)
     model, optimiser = modify_model_and_optimizer(
         model,
         pct_to_freeze=config["pct_to_freeze"],
@@ -124,38 +162,45 @@ def train_config(config,budget,num_classes,train_dataset,val_dataset):
     criterion = nn.CrossEntropyLoss()
     model.to(device)
     model.train()
+    
     for epoch in range(budget):
         running_loss = 0.0
-        for n, (images, masks) in enumerate(train_loader):
+        
+        # Wrap the training loop with tqdm
+        for n, (images, masks) in enumerate(tqdm(train_loader, desc=f"Epoch {epoch+1}/{budget}", unit="batch")):
             images, masks = images.to(device), masks.to(device)
             
             optimiser.zero_grad()
             outputs = model(images)['out']
             
-            masks = masks.squeeze(1) 
+            # masks = masks.argmax(dim=1)  # Convert masks to the correct format
+            print(outputs.shape, masks.shape)
             loss = criterion(outputs, masks)
             loss.backward()
             optimiser.step()
             
             running_loss += loss.item()
 
-            print("Epoch {} Batch {} Loss {}".format(epoch, n,loss.item()))
-        print("Epoch {} Final Loss {}".format(epoch,running_loss/len(train_loader)))
+            # Update tqdm with the current loss
+            tqdm.write(f"Epoch {epoch+1} Batch {n+1} Loss: {loss.item():.4f}")
         
-    avg_mean_iou = validate_config(model,val_loader,device,num_classes)
+        print(f"Epoch {epoch+1} Final Loss: {running_loss/len(train_loader):.4f}")
+        
+    avg_mean_iou = validate_config(model, val_loader, device, num_classes)
 
-    total_time = time.time() - start_time()
+    total_time = time.time() - start_time
     return avg_mean_iou, total_time
 
 def modify_model_and_optimizer(model, pct_to_freeze=0.0, layer_decay=None, lr=1e-4):
     layers = list(model.children())
     num_layers = len(layers)
 
-    for layer in layers:
-        for param in layer.parameters():
-            param.requires_grad = False
+    # for layer in layers:
+    #     for param in layer.parameters():
+    #         param.requires_grad = False
 
     if pct_to_freeze > 0.0:
+        print("PCT")
         total_params = sum(p.numel() for p in model.parameters())
         params_to_freeze = int(total_params * pct_to_freeze)
 
@@ -170,6 +215,7 @@ def modify_model_and_optimizer(model, pct_to_freeze=0.0, layer_decay=None, lr=1e
                 break
 
     if layer_decay > 0.0:
+        print("Layer Decay")
         freeze_layers = int(num_layers * layer_decay)
         
         for i in range(num_layers):
@@ -183,13 +229,14 @@ def modify_model_and_optimizer(model, pct_to_freeze=0.0, layer_decay=None, lr=1e
     return model, optimizer
 
 
-def validate_config(model,valid_loader,device,num_classes):
+def validate_config(model, valid_loader, device, num_classes):
     model.eval()
     pixel_accuracy_list = []
     mean_iou_list = []
     
     with torch.no_grad():
-        for images, masks in valid_loader:
+        # Wrap the validation loop with tqdm
+        for images, masks in tqdm(valid_loader, desc="Validating", unit="batch"):
             images, masks = images.to(device), masks.to(device)
             masks = masks.squeeze(1) 
             outputs = model(images)['out']
