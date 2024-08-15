@@ -22,8 +22,8 @@ class Optimiser:
         transforms.Resize((128,256))
     ])
 
-        self.train_dataset = CamVidDataset(root_dir='/work/dlclarge2/dasb-Camvid/CamVid', split='train', transform=self.train_transform)
-        self.val_dataset = CamVidDataset(root_dir='/work/dlclarge2/dasb-Camvid/CamVid', split='val', transform=self.train_transform)
+        self.train_dataset = CamVidDataset(root_dir='/content/drive/MyDrive/CamVid', split='train', transform=self.train_transform)
+        self.val_dataset = CamVidDataset(root_dir='/content/drive/MyDrive/CamVid', split='val', transform=self.train_transform)
         self.num_classes = 11
 
     def train(self,b):        
@@ -69,7 +69,7 @@ class Optimiser:
     def prepare(self):
         for config in self.configs:
             print("Preparing Config {}".format(config["idx"]))
-            config = self.finetune(config,budget=1)
+            config = self.finetune(config,budget=0)
             self.update_configs(config)
 
     def finetune(self,config,budget):
@@ -108,7 +108,7 @@ class Optimiser:
                 perf_target.append(data[i]["perf_curve"][b])
             else:
                 perf_curve.append(data[i]["perf_curve"])
-        return idx,torch.tensor(config),torch.tensor(perf_curve),torch.tensor(budget),torch.tensor(perf_target),torch.tensor(meta_feat)
+        return idx,torch.tensor(config,dtype=torch.float32),torch.tensor(perf_curve,dtype=torch.float32),torch.tensor(budget,dtype=torch.float32),torch.tensor(perf_target,dtype=torch.float32),torch.tensor(meta_feat,dtype=torch.float32)
 
     def prepare_data_cost(self,data,b,flag=None):
         print("Preparing data cost")
@@ -129,4 +129,4 @@ class Optimiser:
             else:
                 cost_curve.append(data[i]["cost_curve"])
         
-        return idx,torch.tensor(config),torch.tensor(cost_curve),torch.tensor(budget),torch.tensor(cost_target),torch.tensor(meta_feat)
+        return idx,torch.tensor(config,dtype=torch.float32),torch.tensor(cost_curve,dtype=torch.float32),torch.tensor(budget,dtype=torch.float32),torch.tensor(cost_target,dtype=torch.float32),torch.tensor(meta_feat,dtype=torch.float32)
