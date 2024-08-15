@@ -3,8 +3,11 @@ from performance import PerfEstimator
 from torchvision import transforms
 from scipy.stats import norm
 import numpy as np
-from data import CamVidDataset,train_config
+from finetune import train_config
+from datasets import CamVidDataset
 import torch
+from sklearn.model_selection import train_test_split
+from torch.utils.data import Subset
 
 class Optimiser:
     def __init__(self,configs,max_budget):
@@ -22,8 +25,14 @@ class Optimiser:
         transforms.Resize((128,256))
     ])
 
-        self.train_dataset = CamVidDataset(root_dir='/content/drive/MyDrive/CamVid', split='train', transform=self.train_transform)
-        self.val_dataset = CamVidDataset(root_dir='/content/drive/MyDrive/CamVid', split='val', transform=self.train_transform)
+        self.train_dataset = CamVidDataset(root_dir='/work/dlclarge2/dasb-Camvid/CamVid',split='train',transform = self.train_transform)
+        self.val_dataset = CamVidDataset(root_dir='/work/dlclarge2/dasb-Camvid/CamVid',split='val',transform = self.train_transform)
+        
+        # dataset = Leaf_Dataset(root_dir='/work/dlclarge2/dasb-Camvid/leaf', transform=self.train_transform)
+        # train_idx, val_idx = train_test_split(list(range(len(dataset))), test_size=0.4, random_state=42)
+        # self.train_dataset = Subset(dataset, train_idx)
+        # self.val_dataset = Subset(dataset, val_idx)
+        # self.val_dataset = Leaf_Dataset(root_dir='/work/dlclarge2/dasb-Camvid/leaf', transform=self.train_transform)
         self.num_classes = 11
 
     def train(self,b):        

@@ -6,7 +6,7 @@ from config import sample_configurations
 
 if __name__ == "__main__":
 
-    hp_file = "/content/qtt-seg/hp.json"
+    hp_file = "hp.json"
     num_configs = 1
     max_budget = 10
 
