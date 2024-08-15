@@ -16,7 +16,7 @@ from tqdm import tqdm
 import pandas as pd
 
 class CamVidDataset(Dataset):
-    def __init__(self, root_dir, split='train', transform=None, class_dict_csv='/work/dlclarge2/dasb-Camvid/CamVid/class_dict.csv'):
+    def __init__(self, root_dir, split='train', transform=None, class_dict_csv='/content/drive/MyDrive/CamVid/class_dict.csv'):
         self.root_dir = root_dir
         self.split = split
         self.transform = transform
@@ -164,7 +164,7 @@ def train_config(config, budget, num_classes, train_dataset, val_dataset):
     model.to(device)
     model.train()
     
-    for epoch in range(budget):
+    for epoch in range(budget+1):
         running_loss = 0.0
         
         # Wrap the training loop with tqdm
@@ -176,7 +176,6 @@ def train_config(config, budget, num_classes, train_dataset, val_dataset):
             
             # masks = masks.argmax(dim=1)  # Convert masks to the correct format
             masks = torch.squeeze(masks,1)
-            print(outputs.shape, masks.shape)
             loss = criterion(outputs, masks)
             loss.backward()
             optimiser.step()
@@ -190,7 +189,7 @@ def train_config(config, budget, num_classes, train_dataset, val_dataset):
         
     avg_loss = validate_config(model, val_loader, device, criterion)
 
-    total_time = time.time() - start_time
+    total_time = (time.time() - start_time)/3600
     return avg_loss, total_time
 
 def modify_model_and_optimizer(model, pct_to_freeze=0.0, layer_decay=None, lr=1e-4):
