@@ -51,12 +51,15 @@ class PerfEstimator(torch.nn.Module):
 
         # Ensure that all tensors are moved to the appropriate device
         target = target.to(self.device)
+        print(target)
+        print(curve)
 
         for i in range(self.refine_steps):
             optimizer.zero_grad()
             feat = self.encoder(config, curve, budget, meta_feat).to(self.device)
             self.gp_model.set_train_data(feat, target, False)
             output = self.gp_model(feat)
+            print(output)
             loss = -self.mll(output, target)
             loss.backward()
             optimizer.step()
@@ -67,11 +70,13 @@ class PerfEstimator(torch.nn.Module):
     def predict_pipeline(
         self,
         config, curve, budget, meta_feat,
-    ):
+    ):  
+        print(curve)
         self.eval()
         with torch.no_grad(): 
-            test_x = self.encoder(config, curve, budget, meta_feat).to(self.device)
+            test_x = self.encoder(config, curve, budget, meta_feat).to(self.device).float()
             pred = self.likelihood(self.gp_model(test_x))
         mean = pred.mean.reshape(-1).to(self.device)
         std = pred.stddev.reshape(-1).to(self.device)
+        print(mean,std)
         return mean, std
